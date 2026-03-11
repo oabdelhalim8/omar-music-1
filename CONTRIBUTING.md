@@ -1,4 +1,4 @@
-# Contributing to omar-music-1
+# Contributing Guidelines
 
 This guide explains how to work on **omar-music-1** — the primary working repository — using VS Code and GitHub Copilot.
 
