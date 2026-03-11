@@ -41,12 +41,7 @@ git clone https://github.com/oabdelhalim8/omar-music-1.git
 cd omar-music-1
 ```
 
-> ⚠️ **No upstream remotes**  
-> **Upstream remotes are not used in this project.** Do not add an `upstream` remote or run any `git fetch/pull/push` to upstream.
-
-> **Clone vs Fetch**  
-> `git clone` downloads the entire repository to your machine for the first time.  
-> `git fetch` / `git pull` are used *after* you already have a clone to download new commits.
+> **Note:** Only push to `origin` (omar-music-1). This project does not use upstream remotes.
 
 ---
 
