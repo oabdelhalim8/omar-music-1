@@ -182,5 +182,3 @@ python VQDiffusion/generate_midi.py
 ```
 
 ---
-
-If you have any questions, feel free to open an [issue](https://github.com/oabdelhalim8/omar-music-1/issues).
