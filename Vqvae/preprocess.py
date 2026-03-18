@@ -31,7 +31,7 @@ def load_model(ckpt_path, cfg, device):
     return model
 
 
-def run_midi2vetcor(config_path, ckpt_path, save_path):
+def run_midi2vector(config_path, ckpt_path, save_path):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
@@ -59,6 +59,6 @@ def run_midi2vetcor(config_path, ckpt_path, save_path):
 
 
 if __name__ == '__main__':
-    run_midi2vetcor('cfg_maestro_conv2d.yml', 
+    run_midi2vector('cfg_maestro_conv2d.yml', 
                     'runs/checkpoints-exp-20230720/exp-20230720_72.pt',
                     '../datasets/vqvae_encode_20230720.pkl')
