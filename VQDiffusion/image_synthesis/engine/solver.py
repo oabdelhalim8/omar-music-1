@@ -173,7 +173,7 @@ class Solver(object):
         elif return_type == 'dict':
             pass 
         else:
-            raise ValueError('Unknow of return type: {}'.format(return_type))
+            raise ValueError('Unknown return type: {}'.format(return_type))
         return lrs
 
     def sample(self, batch, phase='train', step_type='iteration'):
