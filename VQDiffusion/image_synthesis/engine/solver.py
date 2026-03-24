@@ -206,15 +206,15 @@ class Solver(object):
                 os.makedirs(save_dir, exist_ok=True)
                 save_path = os.path.join(save_dir, 'e{:010d}_itr{:010d}_rank{}{}'.format(self.last_epoch, self.last_iter%self.dataloader['train_iterations'], get_rank(), suffix))
 
-                # 用于记录midi数据生成结果
+                # Logs MIDI data generation outputs
                 if isinstance(v, tuple):
-                    # 记录生成的codebook索引
+                    # Logs generated codebook index values
                     # with open(save_path+'.txt', 'a') as f:
                     #     f.write(str(v[0])+'\n')
                     #     f.close()
                     # self.logger.log_info('save {} to {}'.format(k, save_path+'txt'))
 
-                    # 记录实际成成的midi数据
+                    # Logs actual generated MIDI data
                     # miniaturizer = MidiMiniature(1)  # 1/4th
                     # midi = miniaturizer.miniature2midi(v[1])
                     # midi.save(save_path + '.mid')
