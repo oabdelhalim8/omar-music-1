@@ -21,3 +21,27 @@ data_func:
 shape: [1, 88, 1024]
 
 vis_epoch: 1
+
+# ── Metric-aware checkpoint retention ────────────────────────────────────────
+checkpoint:
+  # Keep-Top-K: retain only the N best checkpoints by validation loss.
+  # The adaptive risk controller may tighten this value during high-risk phases.
+  save_top_k: 5
+  # Rolling-Window: always keep the last K checkpoints as a FIFO safety net.
+  keep_last_k: 3
+  # Weights-Only: save model weights only (~50 % smaller); set false to also
+  # persist optimizer state (needed to resume training exactly).
+  weights_only: true
+  # Metric direction: "min" for loss (lower is better).
+  mode: min
+
+# ── CV-Checkpoint Coupling (Adaptive Threshold Mode) ─────────────────────────
+divergence:
+  # Absolute train-val gap above which risk starts to escalate.
+  gap_threshold: 0.05
+  # Fold-loss variance above which risk is immediately set to HIGH.
+  high_variance_threshold: 0.02
+  # Sliding window length (epochs) for gap history.
+  history_window: 5
+  # Number of folds used for the lightweight k-fold CV pass.
+  cv_folds: 5

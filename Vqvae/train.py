@@ -2,9 +2,10 @@ import os
 import numpy as np
 import torch
 from utils.dataload import MidiDatasetVqvae, load_maestro_data, print_logger, load_midi_data
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from model.vqvae import VectorQuantizedVAE
 from utils.midi_transfer import midi2pianoroll, pianoroll2midi
+from utils.checkpoint_manager import CheckpointManager, DivergenceRiskTracker, RISK_POLICY, RiskLevel
 from types import SimpleNamespace
 import yaml
 from tqdm import tqdm
@@ -24,6 +25,26 @@ class Lightning:
         self.generator_data()
         self.build_model()
         self.logs.info(cfg)
+
+        # ── Metric-aware checkpoint retention ────────────────────────────
+        ckpt_cfg = getattr(self.args, 'checkpoint', {})
+        self.ckpt_manager = CheckpointManager(
+            save_dir=self.save_path,
+            model_name=self.args.model_name,
+            save_top_k=ckpt_cfg.get('save_top_k', 5),
+            keep_last_k=ckpt_cfg.get('keep_last_k', 3),
+            weights_only=ckpt_cfg.get('weights_only', True),
+            mode=ckpt_cfg.get('mode', 'min'),
+        )
+
+        # ── Divergence risk tracker ───────────────────────────────────────
+        div_cfg = getattr(self.args, 'divergence', {})
+        self.risk_tracker = DivergenceRiskTracker(
+            gap_threshold=div_cfg.get('gap_threshold', 0.05),
+            high_variance_threshold=div_cfg.get('high_variance_threshold', 0.02),
+            history_window=div_cfg.get('history_window', 5),
+        )
+        self._cv_folds = div_cfg.get('cv_folds', 5)
 
     def generator_data(self):
         trn_data, val_data, self.vis_data = eval(self.args.data_func['func'])(**self.args.data_func['params'])
@@ -115,8 +136,54 @@ class Lightning:
             midi = pianoroll2midi(y.reshape(self.args.shape[0], -1)) if self.args.shape[0] > 1 else pianoroll2midi(y)
             midi.write('{}/{}-epoch_{:05d}-{}-recon.midi'.format(save_path, name, epoch, os.path.basename(path)[:-5]))
 
+    def _run_kfold_cv(self, n_folds: int) -> list:
+        """Run lightweight k-fold CV over the validation dataset.
+
+        The model is evaluated (not retrained) on each fold so that fold-loss
+        variance reflects prediction instability rather than re-training noise.
+        This matches the "layer-wise k-fold CV" intent in the design: we probe
+        how consistently the current model generalises across held-out subsets.
+
+        Parameters
+        ----------
+        n_folds:
+            Number of folds.
+
+        Returns
+        -------
+        list of float
+            Per-fold validation losses.
+        """
+        dataset = self.iterValid.dataset
+        n = len(dataset)
+        fold_size = max(1, n // n_folds)
+
+        fold_losses = []
+        self.model.eval()
+        with torch.no_grad():
+            for k in range(n_folds):
+                start = k * fold_size
+                end = min(start + fold_size, n)
+                if start >= n:
+                    break
+                indices = list(range(start, end))
+                fold_loader = DataLoader(
+                    Subset(dataset, indices),
+                    batch_size=self.args.batch_size,
+                    pin_memory=True,
+                )
+                fold_loss = []
+                for batch in fold_loader:
+                    x = batch.to(self.device)
+                    _, x_recon, _ = self.model(x)
+                    loss = self.compute_loss(x_recon, x)
+                    fold_loss.append(loss.item())
+                if fold_loss:
+                    fold_losses.append(float(np.mean(fold_loss)))
+
+        return fold_losses
+
     def fit(self):
-        best_accr1, best_accr2 = 1e10, 1e10
         for epoch in range(self.args.epochs):
             loss_trn, accr_trn_TP, accr_trn_FP = self.train()
             loss_val, accr_val_TP, accr_val_FP = self.valid()
@@ -125,18 +192,48 @@ class Lightning:
             self.logs.info('train_rec_loss: {:.6f} accr_trn_TP: {:.6f} accr_trn_FP: {:.6f}'.format(loss_trn, accr_trn_TP, accr_trn_FP))
             self.logs.info('valid_rec_loss: {:.6f} accr_val_TP: {:.6f} accr_val_FP: {:.6f}'.format(loss_val, accr_val_TP, accr_val_FP))
 
-            # save
-            if accr_trn_TP > best_accr1:
-                best_accr1 = accr_trn_TP
-                torch.save(self.model.state_dict(), '{}/{}_best_train.pt'.format(self.save_path, self.args.model_name))
+            # ── Divergence risk assessment ────────────────────────────────
+            self.risk_tracker.update_gap(loss_trn, loss_val)
 
-            if accr_val_TP > best_accr2:
-                best_accr2 = accr_val_TP
-                torch.save(self.model.state_dict(), '{}/{}_best_valid.pt'.format(self.save_path, self.args.model_name))
+            # Trigger k-fold CV when the gap is widening to measure fold variance
+            if self.risk_tracker.gap_trend > 0:
+                fold_losses = self._run_kfold_cv(self._cv_folds)
+                self.risk_tracker.update_fold_stats(fold_losses)
+                self.logs.info(
+                    'kfold_cv fold_variance: {:.6f} fold_agreement: {:.4f}'.format(
+                        self.risk_tracker.fold_variance,
+                        self.risk_tracker.fold_agreement,
+                    )
+                )
 
-            if (epoch+1) % self.args.vis_epoch == 0:
+            risk = self.risk_tracker.compute_risk()
+            policy = RISK_POLICY[risk]
+
+            # Tighten or relax top-k retention to match current risk
+            self.ckpt_manager.set_top_k(policy['save_top_k'])
+
+            self.logs.info(
+                'risk: {}  save_every: {}  save_top_k: {}'.format(
+                    risk.value, policy['save_every'], policy['save_top_k']
+                )
+            )
+
+            # ── Adaptive checkpoint saving ────────────────────────────────
+            save_every = policy['save_every']
+            if (epoch + 1) % save_every == 0:
+                saved_path = self.ckpt_manager.save(
+                    model=self.model,
+                    optimizer=self.optimizer,
+                    epoch=epoch,
+                    metric_value=loss_val,
+                    fold_agreement=self.risk_tracker.fold_agreement,
+                    risk_level=risk,
+                )
+                self.logs.info('checkpoint saved: {}'.format(saved_path))
+
+            # ── Periodic generation (unchanged cadence) ───────────────────
+            if (epoch + 1) % self.args.vis_epoch == 0:
                 self.generate(epoch)
-                torch.save(self.model.state_dict(), '{}/{}_{}.pt'.format(self.save_path, self.args.model_name, epoch))
 
 
 if  __name__ == "__main__":
