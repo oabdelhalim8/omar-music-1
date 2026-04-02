@@ -64,7 +64,7 @@ class Logger(object):
                 self.tb_writer.add_scalar(**kargs)
 
     def add_scalars(self, **kargs):
-        """Log a scalar variable."""
+        """Log scalars."""
         if self.is_primary:
             if self.tb_writer is not None:
                 self.tb_writer.add_scalars(**kargs)
@@ -76,7 +76,7 @@ class Logger(object):
                 self.tb_writer.add_image(**kargs)
 
     def add_images(self, **kargs):
-        """Log a scalar variable."""
+        """Log images."""
         if self.is_primary:
             if self.tb_writer is not None:
                 self.tb_writer.add_images(**kargs)
