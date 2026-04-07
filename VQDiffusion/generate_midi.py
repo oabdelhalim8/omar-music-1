@@ -8,7 +8,7 @@ from utils.midi_transfer import pianoroll2midi
 
 
 class MidiGenerate(VQ_Diffusion):
-    def __int__(self):
+    def __init__(self):
         super().__int__()
 
     def inference_generate_sample_with_class(self, text, truncation_rate, save_root, batch_size=2, cnt=1, fast=False):
