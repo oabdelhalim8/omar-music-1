@@ -9,7 +9,7 @@ from utils.midi_transfer import pianoroll2midi
 
 class MidiGenerate(VQ_Diffusion):
     def __init__(self):
-        super().__int__()
+        super().__init__()
 
     def inference_generate_sample_with_class(self, text, truncation_rate, save_root, batch_size=2, cnt=1, fast=False):
         os.makedirs(save_root, exist_ok=True)
