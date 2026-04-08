@@ -1,5 +1,4 @@
 import torch
-# from image_synthesis.data.base_dataset import ConcatDatasetWithIndex as ConcatDataset
 from torch.utils.data import ConcatDataset
 from image_synthesis.utils.misc import instantiate_from_config
 from image_synthesis.distributed.distributed import is_distributed
