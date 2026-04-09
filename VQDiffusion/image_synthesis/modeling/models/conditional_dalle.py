@@ -41,9 +41,9 @@ class C_DALLE(nn.Module):
             params = []
             for n in names:
                 try: # the parameters() method is not overwritten for some classes
-                    params += getattr(self, name).parameters(recurse=recurse, name=name)
+                    params += getattr(self, n).parameters(recurse=recurse, name=n)
                 except:
-                    params += getattr(self, name).parameters(recurse=recurse)
+                    params += getattr(self, n).parameters(recurse=recurse)
             return params
 
     @property
